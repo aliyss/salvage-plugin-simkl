@@ -14,6 +14,7 @@ import { MEDIA_TYPES, parseSnapshot } from "./simkl";
 import type { Item, MediaType, TypeSnapshot } from "./simkl";
 
 const FILE = "sync.json";
+const TOKEN_FILE = "token.json";
 /** Enough for a large library, and small enough to read in a moment. */
 const MAX_ITEMS = 5_000;
 const ITEM_STATUSES = [
@@ -34,6 +35,10 @@ export type SyncState = {
 
 function stateFile(): string {
   return join(process.env.SALVAGE_PLUGIN_DATA ?? ".", FILE);
+}
+
+function tokenFile(): string {
+  return join(process.env.SALVAGE_PLUGIN_DATA ?? ".", TOKEN_FILE);
 }
 
 export function emptyState(): SyncState {
@@ -92,6 +97,38 @@ export async function loadState(): Promise<SyncState> {
     // A missing or unreadable store is simply a first sync.
     return emptyState();
   }
+}
+
+/**
+ * The access token a refresh produced in an earlier visit, kept for the sign-in
+ * it came from. `from` is a digest of the token the helper holds, so a new
+ * sign-in — which writes a new token there — stops this copy answering for it.
+ */
+export async function loadToken(from: string): Promise<string | null> {
+  try {
+    const raw = JSON.parse(await readFile(tokenFile(), "utf8")) as unknown;
+    if (
+      !isRecord(raw) ||
+      raw.from !== from ||
+      typeof raw.value !== "string" ||
+      !raw.value
+    ) {
+      return null;
+    }
+    return raw.value;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveToken(from: string, value: string): Promise<void> {
+  const file = tokenFile();
+  await mkdir(join(file, ".."), { recursive: true }).catch(() => undefined);
+  const part = `${file}.part`;
+  await writeFile(part, JSON.stringify({ from, value }), "utf8").catch(
+    () => undefined,
+  );
+  await rename(part, file).catch(() => undefined);
 }
 
 export async function saveState(state: SyncState): Promise<void> {

@@ -12,6 +12,7 @@
 import { PluginError } from "./sdk";
 
 const API = "https://api.simkl.com";
+const TOKEN_URL = `${API}/oauth2/token`;
 const SITE = "https://simkl.com";
 const POSTERS = "https://simkl.in/posters";
 const APP_NAME = "salvage";
@@ -108,7 +109,23 @@ export type TypeSnapshot = {
   domain: DomainActivities;
 };
 
-export type Credentials = { clientId: string; token: string };
+export type Credentials = {
+  clientId: string;
+  token: string;
+  /** The token that can replace the one above, when the sign-in left one. */
+  refreshToken?: string;
+};
+
+/**
+ * The token this computer holds is no longer accepted. It carries the same code
+ * the app reads, so a sign-in failure still reads as one; what is different is
+ * that a refresh token can replace it without asking anybody anything.
+ */
+export class TokenRefused extends PluginError {
+  constructor(message: string) {
+    super("refused", message);
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -432,9 +449,8 @@ async function readJson(
   }
   if (response.status === 401 || response.status === 403) {
     await response.body?.cancel().catch(() => undefined);
-    throw new PluginError(
-      "refused",
-      "SIMKL did not accept that token. Approve the app again and paste the new token.",
+    throw new TokenRefused(
+      "SIMKL did not accept that token. Approve this computer again.",
     );
   }
   if (response.status === 429) {
@@ -464,6 +480,46 @@ async function readJson(
       "refused",
       "SIMKL answered with something unreadable.",
     );
+  }
+}
+
+/**
+ * A new access token, from the refresh token the sign-in left behind. SIMKL's
+ * access tokens last a week, so this is what keeps a canvas working without
+ * sending the user back through a consent page every time.
+ */
+export async function refreshAccessToken(
+  credentials: Credentials,
+): Promise<string | null> {
+  if (!credentials.refreshToken) {
+    return null;
+  }
+
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": USER_AGENT,
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: credentials.clientId,
+      refresh_token: credentials.refreshToken,
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch(() => null);
+  if (!response?.ok) {
+    await response?.body?.cancel().catch(() => undefined);
+    return null;
+  }
+
+  const raw = await new Response(response.body).text();
+  try {
+    const body: unknown = JSON.parse(raw);
+    const token = isRecord(body) ? body.access_token : null;
+    return typeof token === "string" && token.trim() ? token.trim() : null;
+  } catch {
+    return null;
   }
 }
 

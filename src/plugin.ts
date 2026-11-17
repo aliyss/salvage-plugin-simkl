@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { keepCovers } from "./covers";
 import { PluginError, serve } from "./sdk";
 import {
@@ -9,10 +11,18 @@ import {
   LIST_STATUSES,
   MEDIA_TYPES,
   mergeItems,
+  refreshAccessToken,
   syncPlan,
+  TokenRefused,
   typeSnapshot,
 } from "./simkl";
-import { loadState, saveState, type SyncState } from "./store";
+import {
+  loadState,
+  loadToken,
+  saveState,
+  saveToken,
+  type SyncState,
+} from "./store";
 import { keptStill } from "./still";
 
 import type { Credentials, Item, MediaType } from "./simkl";
@@ -40,10 +50,50 @@ function credentialsOf(
   if (!clientId || !token) {
     throw new PluginError(
       "bad_subject",
-      "Add your SIMKL client id and access token in this plugin's settings.",
+      "Sign in to SIMKL in this plugin's settings first.",
     );
   }
-  return { clientId, token };
+  const refreshToken = secrets?.refreshToken?.trim();
+  return refreshToken ? { clientId, token, refreshToken } : { clientId, token };
+}
+
+/**
+ * Which sign-in a kept token belongs to. A new sign-in writes a new token to
+ * the helper, and a copy refilled from that one has to stop answering for the
+ * old token rather than outlive it.
+ */
+function tokenFingerprint(token: string): string {
+  return createHash("sha256").update(token).digest("hex").slice(0, 12);
+}
+
+/**
+ * Runs one visit with a token that works.
+ *
+ * The helper holds the token a sign-in produced, and SIMKL expires an access
+ * token after a week. When that happens the refresh token the sign-in also left
+ * behind buys a new one, and the copy is kept here so every later visit starts
+ * with it instead of spending a request to be refused first.
+ */
+async function withToken<T>(
+  credentials: Credentials,
+  run: (credentials: Credentials) => Promise<T>,
+): Promise<T> {
+  const from = tokenFingerprint(credentials.token);
+  const kept = await loadToken(from);
+  const current = kept ? { ...credentials, token: kept } : credentials;
+  try {
+    return await run(current);
+  } catch (error) {
+    if (!(error instanceof TokenRefused)) {
+      throw error;
+    }
+    const fresh = await refreshAccessToken(current);
+    if (!fresh) {
+      throw error;
+    }
+    await saveToken(from, fresh);
+    return await run({ ...credentials, token: fresh });
+  }
 }
 
 function typeOf(value: unknown): MediaType {
@@ -210,11 +260,13 @@ async function catalogue(
   const loaded = await loadState();
   let state = loaded;
   try {
-    const refreshed = await refresh(loaded, credentials, type);
-    state = refreshed.state;
-    if (refreshed.dirty) {
-      await saveState(state);
-    }
+    state = await withToken(credentials, async (live) => {
+      const refreshed = await refresh(loaded, live, type);
+      if (refreshed.dirty) {
+        await saveState(refreshed.state);
+      }
+      return refreshed.state;
+    });
   } catch (error) {
     // A canvas holding the library as it was last read is worth more than a
     // blank one, so a failed sync answers from what is here and tries again on
@@ -254,7 +306,11 @@ async function catalogue(
 async function whoami(
   secrets: Record<string, string> | undefined,
 ): Promise<Data> {
-  return { kind: "auth", text: await fetchViewer(credentialsOf(secrets)) };
+  const credentials = credentialsOf(secrets);
+  return {
+    kind: "auth",
+    text: await withToken(credentials, (live) => fetchViewer(live)),
+  };
 }
 
 export default () =>

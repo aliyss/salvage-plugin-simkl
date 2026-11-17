@@ -26,32 +26,42 @@ note still on it.
 ## Requirements
 
 - Salvage with the desktop helper paired
-- A SIMKL app: a **client id** and an **access token**, saved on your computer
-  by the helper and never written to your account.
+- A SIMKL app, created once at
+  [simkl.com/settings/developer](https://simkl.com/settings/developer/)
 
-Create the app at [simkl.com/settings/developer](https://simkl.com/settings/developer/).
-Then finish the sign-in, which SIMKL does on its own site:
+## Signing in
 
-```sh
-# 1. Ask for a code
-curl "https://api.simkl.com/oauth/pin?client_id=YOUR_CLIENT_ID"
+The sign-in happens on this computer, and the token never exists on your
+account:
 
-# 2. Open https://simkl.com/pin/ and type the user_code it answered
+1. Create the app on SIMKL. It gets a client id.
+2. Register the redirect URL the plugin's sign-in page shows. SIMKL matches it
+   exactly, and a loopback address is matched without its port, so
+   `http://127.0.0.1/v1/plugins/salvage-plugin-simkl/oauth/callback` covers any
+   port the helper runs on.
+3. Paste the client id into the plugin and press **Sign in with SIMKL**.
 
-# 3. Collect the token
-curl "https://api.simkl.com/oauth/pin/USER_CODE?client_id=YOUR_CLIENT_ID"
-```
+The helper opens SIMKL's consent page with a PKCE challenge and a state it
+generated, receives the code at its own callback, and exchanges it at
+`api.simkl.com` — the verifier and the token stay in the helper's process and
+its secrets file. SIMKL's access tokens last a week, so the refresh token it
+issues is kept beside the token and a new access token is fetched silently when
+one runs out. If SIMKL ever refuses both, the settings page says so and the
+sign-in is repeated.
 
-Paste the `client_id` and the `access_token` into the plugin's settings. The
-token is long-lived; SIMKL has no refresh grant, and a 401 means the app was
-disconnected at simkl.com/settings/connections.
+Older helper versions cannot finish the exchange. There, the plugin still works
+with a token pasted by hand: finish SIMKL's pin flow yourself
+(`https://api.simkl.com/oauth/pin?client_id=…`, enter the code at
+`https://simkl.com/pin/`, then `https://api.simkl.com/oauth/pin/USER_CODE?client_id=…`)
+and paste the access token into the plugin's settings.
 
 ## Settings
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | SIMKL client id | — | From the app you created; kept on this computer |
-| SIMKL access token | — | The token SIMKL gave the app |
+| SIMKL access token | — | Written by the helper when you approve this computer |
+| SIMKL refresh token | — | Written by the helper too, so the canvas keeps working |
 | Shows, anime or films | TV shows | Which library the canvas shows |
 | Which of my lists | watching, plan to watch, completed | Only these buckets are drawn; none ticked means all |
 | How many entries | 30 | Between 5 and 50 |
@@ -66,21 +76,24 @@ letter — the alternative is a client id that gets suspended for downloading th
 whole library on every visit.
 
 1. **The gate.** Every visit asks `GET /sync/activities`, a tiny answer of
-   last-modified timestamps. If the newest timestamp is the one the last sync
-   was taken at, the library on this computer is already current and nothing
-   else is requested.
-2. **The delta.** When something moved, the library that moved is read with
-   `GET /sync/all-items/{type}?date_from=<that snapshot>`, which returns only
-   the items that changed — not the library. The delta is merged into the copy
-   on this computer.
+   last-modified timestamps. If this library's timestamp is the one the last
+   sync was taken at, the copy on this computer is current and nothing else is
+   requested.
+2. **The delta.** When it moved, the library is read with
+   `GET /sync/all-items/{type}?date_from=<the timestamp that library was pulled
+   at>`, which returns only the items that changed — not the library. The delta
+   is merged into the copy here.
 3. **The deletions.** `date_from` never reports a deleted item, so when the
    `removed_from_list` timestamp moves the plugin reads the library's ids only
    (`extended=simkl_ids_only`) and compares. An item the account deleted stops
    being drawn but is remembered, so a note written about it keeps its poster.
 4. **The first sync.** With nothing stored, the whole library of the one type
-   this canvas shows is read once. The snapshot is saved only after every pull
-   succeeded, and read before the pull, so a change made mid-sync is never
-   skipped.
+   this canvas shows is read once. The snapshot is saved only after the pull
+   succeeded, and read before it, so a change made mid-sync is never skipped.
+
+Only the canvas's own library is ever pulled: SIMKL asks single-type apps to
+call one type, and each library keeps its own snapshot so one cannot advance
+past a change another never read.
 
 The store lives in `SALVAGE_PLUGIN_DATA/sync.json`, beside the covers filed in
 `media/`. A page of cards costs no request to SIMKL at all: the covers are

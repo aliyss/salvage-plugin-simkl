@@ -2,7 +2,7 @@
   "pluginApiVersion": 1,
   "id": "salvage-plugin-simkl",
   "name": "SIMKL",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "runtime": { "entry": "dist/plugin.js" },
   "provides": [],
   "contributes": [],
@@ -60,15 +60,29 @@
       "key": "token",
       "kind": "secret",
       "label": "SIMKL access token",
-      "description": "The token SIMKL gives your app once you approve it at simkl.com/pin.",
+      "description": "Written by the helper when you approve this computer on simkl.com.",
+      "maxLength": 200
+    },
+    {
+      "key": "refreshToken",
+      "kind": "secret",
+      "label": "SIMKL refresh token",
+      "description": "Written by the helper too, so a canvas keeps working when the access token runs out.",
       "maxLength": 200
     }
   ],
   "auth": {
     "url": "https://simkl.com/settings/developer/",
     "urlLabel": "SIMKL developer settings",
-    "check": "whoami",
+    "callbackPath": "/v1/plugins/salvage-plugin-simkl/oauth/callback",
+    "authorize": "https://simkl.com/oauth2/authorize",
+    "clientIdKey": "clientId",
+    "tokenUrl": "https://api.simkl.com/oauth2/token",
+    "scopes": "media:read",
+    "issuer": "https://simkl.com",
+    "refreshSecret": "refreshToken",
     "secret": "token",
-    "note": "SIMKL's sign-in finishes on simkl.com: create an app, approve it there, and paste the access token here. Both are kept by the helper on this computer; nothing about them reaches your account."
+    "check": "whoami",
+    "note": "Sign in on this computer only. The helper opens SIMKL's consent page, exchanges the code here, and keeps the token; nothing about it reaches your account."
   }
 }
