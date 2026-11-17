@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
-import { keepCovers } from "./covers";
+import { keepCovers, keptCovers } from "./covers";
+import { episodePage, fetchEpisodes, linkFromUrl } from "./episodes";
 import { PluginError, serve } from "./sdk";
 import {
   dropMissing,
@@ -23,8 +24,7 @@ import {
   saveToken,
   type SyncState,
 } from "./store";
-import { keptStill } from "./still";
-
+import type { CoverColours } from "./covers";
 import type { Credentials, Item, MediaType } from "./simkl";
 import type { Data, Paging, Subject } from "./sdk";
 
@@ -134,27 +134,55 @@ function pageOf(
   return { offset, limit };
 }
 
-/** An item with the cover filed here for it, which is what a card draws. */
-type CardItem = Item & { cover: string | null };
+/**
+ * An item with the cover filed here for it, and the colour that cover leads
+ * with — the two things a card draws that a sync never reports.
+ */
+type CardItem = Item & { cover: string | null; color: string | null };
+
+/** One item as a card, with the colour its filed cover was read for. */
+function withColour(
+  item: Item,
+  cover: string | null,
+  colours: CoverColours,
+): CardItem {
+  return { ...item, cover, color: cover ? (colours[cover] ?? null) : null };
+}
 
 /**
  * The pictures of one page. A card never asks SIMKL for its cover: the plugin
  * files the copy on this computer first, and the app draws what the helper
  * serves back. A cover still missing when the page is answered leaves the card
  * as the colour block it already paints, and is filed on a later visit.
+ *
+ * The colour of a cover is read out of the picture here too, once in the life
+ * of that picture; `colours` grows as it is read, so the caller can keep it.
  */
-async function withCovers(items: Item[]): Promise<CardItem[]> {
-  const covers = await keepCovers(items.map((item) => item.poster));
-  return items.map((item, index) => ({
-    ...item,
-    cover: covers[index] ?? null,
-  }));
+async function withCovers(
+  items: Item[],
+  colours: CoverColours,
+): Promise<CardItem[]> {
+  const covers = await keepCovers(
+    items.map((item) => item.poster),
+    colours,
+  );
+  return items.map((item, index) =>
+    withColour(item, covers[index] ?? null, colours),
+  );
 }
 
 /** The covers already held for the items a note of this canvas still points at. */
-async function withHeldCovers(items: Item[]): Promise<CardItem[]> {
-  const covers = await Promise.all(items.map((item) => keptStill(item.poster)));
-  return items.map((item, index) => ({ ...item, cover: covers[index] }));
+async function withHeldCovers(
+  items: Item[],
+  colours: CoverColours,
+): Promise<CardItem[]> {
+  const covers = await keptCovers(
+    items.map((item) => item.poster),
+    colours,
+  );
+  return items.map((item, index) =>
+    withColour(item, covers[index] ?? null, colours),
+  );
 }
 
 /**
@@ -212,6 +240,7 @@ async function refresh(
       snapshots: { ...state.snapshots, [type]: snapshot },
       checkedAt: now,
       items: { ...state.items, [type]: items },
+      colours: state.colours,
     },
     dirty: true,
   };
@@ -242,8 +271,8 @@ function knownFor(subject: Subject | undefined, state: SyncState): Item[] {
 /**
  * The library the canvas shows: one page of it, the notes it knows, and whether
  * more follow. The order is the account's own history — what it touched most
- * recently first — because a sync reports watch state, not a cover's colour, so
- * there is nothing else to rank a page by.
+ * recently first — because watch state is what a sync reports; a cover's colour
+ * is read off the picture, and is what the colour view sorts a page by.
  */
 async function catalogue(
   settings: Record<string, unknown>,
@@ -289,11 +318,20 @@ async function catalogue(
   );
   const page = ordered.slice(offset, offset + limit);
 
+  const colours: CoverColours = { ...state.colours };
+  const items = await withCovers(page, colours);
+  const known = await withHeldCovers(knownFor(subject, state), colours);
+  // A colour read now is a picture never decoded again, so it is kept even when
+  // the sync itself had nothing to save.
+  if (Object.keys(colours).length !== Object.keys(state.colours).length) {
+    await saveState({ ...state, colours });
+  }
+
   return {
     kind: "watch-catalogue",
     text: JSON.stringify({
-      items: await withCovers(page),
-      known: await withHeldCovers(knownFor(subject, state)),
+      items,
+      known,
       hasMore: offset + page.length < ordered.length,
     }),
   };
@@ -313,6 +351,32 @@ async function whoami(
   };
 }
 
+/**
+ * The episodes of one show, for the button the app draws on a SIMKL entry. One
+ * request per open, and never part of a sync: SIMKL answers a title's whole
+ * episode list at once and caches it, and this is the one per-item lookup the
+ * plugin's API rules allow.
+ */
+async function episodes(
+  subject: Subject | undefined,
+  secrets: Record<string, string> | undefined,
+  paging: Paging | undefined,
+): Promise<Data> {
+  const link = linkFromUrl(subject?.link?.url);
+  if (!link) {
+    throw new PluginError(
+      "bad_subject",
+      "This entry does not link to a SIMKL show.",
+    );
+  }
+
+  const credentials = credentialsOf(secrets);
+  const list = await withToken(credentials, (live) =>
+    fetchEpisodes(live, link),
+  );
+  return { kind: "episodes", text: episodePage(list, paging) };
+}
+
 export default () =>
   serve(async ({ command, params }) => {
     if (command === "catalogue") {
@@ -325,6 +389,9 @@ export default () =>
     }
     if (command === "whoami") {
       return await whoami(params.secrets);
+    }
+    if (command === "episodes") {
+      return await episodes(params.subject, params.secrets, params.paging);
     }
 
     throw new PluginError("unsupported", `Unknown command ${command}.`);

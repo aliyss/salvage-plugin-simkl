@@ -7,13 +7,15 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const TIMEOUT_MS = 8_000;
 const MAX_BYTES = 1_500_000;
 /** Enough of a sha256 to name one picture, and no more. */
 const HASH_CHARS = 32;
+/** Pictures are fetched a few at a time, so a long season does not flood. */
+const CONCURRENCY = 4;
 const EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif", "gif"];
 
 function mediaDirectory(): string {
@@ -101,4 +103,37 @@ export async function keepStill(url: string | null): Promise<string | null> {
     // A picture that cannot be kept leaves the site's own address in place.
     return null;
   }
+}
+
+/** The bytes of a picture already filed here, or null when it is not. */
+export async function readStill(name: string): Promise<Uint8Array | null> {
+  try {
+    return new Uint8Array(await readFile(join(mediaDirectory(), name)));
+  } catch {
+    return null;
+  }
+}
+
+/** Files a whole list's pictures, a few at a time, in the same order. */
+export async function keepStills(
+  urls: (string | null)[],
+): Promise<(string | null)[]> {
+  const names: (string | null)[] = urls.map(() => null);
+  let next = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= urls.length) {
+        return;
+      }
+      names[index] = await keepStill(urls[index] ?? null);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker),
+  );
+  return names;
 }

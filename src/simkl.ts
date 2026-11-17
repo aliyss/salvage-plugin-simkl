@@ -422,7 +422,7 @@ async function failureMessage(response: Response): Promise<string | null> {
  * rate-limits an app rather than a person, and a plugin that hammers an
  * endpoint gets that client id suspended.
  */
-async function readJson(
+export async function readJson(
   credentials: Credentials,
   path: string,
   params: Record<string, string> = {},

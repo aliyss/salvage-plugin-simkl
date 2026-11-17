@@ -50,6 +50,7 @@ describe("the sync store", () => {
       },
       checkedAt: 1_768_000_000_000,
       items: { shows: [item] },
+      colours: {},
     });
 
     const loaded = await loadState();
@@ -59,6 +60,20 @@ describe("the sync store", () => {
     expect(loaded.checkedAt).toBe(1_768_000_000_000);
     expect(loaded.items.shows).toEqual([item]);
     expect(loaded.items.movies).toBeUndefined();
+  });
+
+  test("keeps the colour read out of each filed cover", async () => {
+    await saveState({
+      ...emptyState(),
+      colours: {
+        "24273cee77f9d9f.jpg": "#2B4C7E",
+        "lowercase.jpg": "#2b4c7e",
+      },
+    });
+
+    const loaded = await loadState();
+    // A colour is only kept in the form a card is given one.
+    expect(loaded.colours).toEqual({ "24273cee77f9d9f.jpg": "#2B4C7E" });
   });
 
   test("a store it cannot read is a first sync, not a crash", async () => {

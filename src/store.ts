@@ -4,19 +4,27 @@
  * the next visit asks SIMKL "what changed since…" with, so losing it costs a
  * full read of the library, and writing half of it would cost a wrong one. A
  * new snapshot is therefore only saved once every pull succeeded.
+ *
+ * Beside it sits what the sync cannot report and the pictures can: the colour
+ * each filed cover leads with, so a poster is read once in its life rather than
+ * once per visit.
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { isColor } from "./color";
 import { MEDIA_TYPES, parseSnapshot } from "./simkl";
 
+import type { CoverColours } from "./covers";
 import type { Item, MediaType, TypeSnapshot } from "./simkl";
 
 const FILE = "sync.json";
 const TOKEN_FILE = "token.json";
 /** Enough for a large library, and small enough to read in a moment. */
 const MAX_ITEMS = 5_000;
+/** Covers outlive the items they were drawn for, so this is the generous cap. */
+const MAX_COLOURS = 4_000;
 const ITEM_STATUSES = [
   "watching",
   "plantowatch",
@@ -31,6 +39,8 @@ export type SyncState = {
   /** When the gate was last asked, so a page turn does not ask again. */
   checkedAt: number | null;
   items: Partial<Record<MediaType, Item[]>>;
+  /** The colour each filed cover leads with, by the name it is filed under. */
+  colours: CoverColours;
 };
 
 function stateFile(): string {
@@ -42,7 +52,7 @@ function tokenFile(): string {
 }
 
 export function emptyState(): SyncState {
-  return { snapshots: {}, checkedAt: null, items: {} };
+  return { snapshots: {}, checkedAt: null, items: {}, colours: {} };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,6 +71,20 @@ function isItem(value: unknown): value is Item {
       (typeof value.status === "string" &&
         ITEM_STATUSES.includes(value.status)))
   );
+}
+
+/** The colours a store holds, newest kept when there are more than the cap. */
+function parseColours(value: unknown): CoverColours {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const colours: CoverColours = {};
+  for (const [name, hex] of Object.entries(value).slice(-MAX_COLOURS)) {
+    if (isColor(hex)) {
+      colours[name] = hex;
+    }
+  }
+  return colours;
 }
 
 export async function loadState(): Promise<SyncState> {
@@ -92,6 +116,7 @@ export async function loadState(): Promise<SyncState> {
           ? raw.checkedAt
           : null,
       items,
+      colours: parseColours(raw.colours),
     };
   } catch {
     // A missing or unreadable store is simply a first sync.

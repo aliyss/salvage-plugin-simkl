@@ -16,6 +16,9 @@ notes.
 - The account's own score on the card, and the bucket it sits in — a canvas of
   several lists dims everything that is not being watched, the way a finished
   task note is dimmed.
+- An **Episodes** button on the entry of a show you opened from the canvas:
+  SIMKL's list for that title, each episode with its air date, its synopsis and
+  a still.
 - A note for any card. Notes are ordinary Salvage notes — Markdown, tags,
   mentions, Trash — stored on the canvas the plugin added.
 
@@ -96,7 +99,7 @@ call one type, and each library keeps its own snapshot so one cannot advance
 past a change another never read.
 
 The store lives in `SALVAGE_PLUGIN_DATA/sync.json`, beside the covers filed in
-`media/`. A page of cards costs no request to SIMKL at all: the covers are
+`media/` and the colour read out of each one. A page of cards costs no request to SIMKL at all: the covers are
 already on disk and the helper serves them.
 
 A canvas asks once per page, so the gate's answer is trusted for two minutes at
@@ -111,8 +114,22 @@ each item's detail page to fill them in. Cards are drawn from what the sync does
 report, and the date view places each one at the moment the account last
 touched it.
 
-The colour view has nothing to sort by for the same reason — a sync reports no
-cover colour — so it reads in the date view's order.
+A sync reports no colour for a cover either, so the plugin reads one out of the
+poster it filed and keeps it beside the snapshot. The colour view sorts by the
+colour a poster leads with, the same rule the app applies to a picture you
+upload, and the swatch on a card is that colour. A cover whose colour has not
+been read yet keeps the colour block a card paints, and is read on the next
+visit.
+
+## Episodes
+
+Opening an entry that came from the canvas offers **Episodes**. The helper reads
+`GET /tv/episodes/{id}` — or `/anime/episodes/{id}` — once, when the list is
+opened, and files the stills it finds on this computer; nothing about the list
+is stored. SIMKL answers a whole title's episodes in one request and caches it,
+and its rules allow exactly this, so it is the one per-item lookup the plugin
+makes. Episodes are numbered through the show, as a running count, and specials
+are left out. A film has no episode list, and its entry offers none.
 
 ## Development
 
