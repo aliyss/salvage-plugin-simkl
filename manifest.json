@@ -1,0 +1,74 @@
+{
+  "pluginApiVersion": 1,
+  "id": "salvage-plugin-simkl",
+  "name": "SIMKL",
+  "version": "0.1.0",
+  "runtime": { "entry": "dist/plugin.js" },
+  "provides": [],
+  "contributes": [],
+  "canvas": {
+    "command": "catalogue",
+    "name": "Watchlist",
+    "icon": "film",
+    "refreshMs": 900000,
+    "settings": [
+      {
+        "key": "type",
+        "kind": "select",
+        "label": "Shows, anime or films",
+        "default": "shows",
+        "options": [
+          { "value": "shows", "label": "TV shows" },
+          { "value": "anime", "label": "Anime" },
+          { "value": "movies", "label": "Movies" }
+        ]
+      },
+      {
+        "key": "lists",
+        "kind": "multiselect",
+        "label": "Which of my lists",
+        "description": "Only the items on these lists are shown. Nothing ticked means all of them. Films have no watching or hold list.",
+        "default": "watching,plantowatch,completed",
+        "options": [
+          { "value": "watching", "label": "Watching" },
+          { "value": "plantowatch", "label": "Plan to watch" },
+          { "value": "completed", "label": "Completed" },
+          { "value": "hold", "label": "On hold" },
+          { "value": "dropped", "label": "Dropped" }
+        ]
+      },
+      {
+        "key": "perPage",
+        "kind": "number",
+        "label": "How many entries",
+        "description": "The canvas asks for this many at a time and loads more as you scroll.",
+        "default": 30,
+        "min": 5,
+        "max": 50
+      }
+    ]
+  },
+  "settings": [
+    {
+      "key": "clientId",
+      "kind": "secret",
+      "label": "SIMKL client id",
+      "description": "From the SIMKL app you create. It is public, but it is kept on this computer beside the token.",
+      "maxLength": 60
+    },
+    {
+      "key": "token",
+      "kind": "secret",
+      "label": "SIMKL access token",
+      "description": "The token SIMKL gives your app once you approve it at simkl.com/pin.",
+      "maxLength": 200
+    }
+  ],
+  "auth": {
+    "url": "https://simkl.com/settings/developer/",
+    "urlLabel": "SIMKL developer settings",
+    "check": "whoami",
+    "secret": "token",
+    "note": "SIMKL's sign-in finishes on simkl.com: create an app, approve it there, and paste the access token here. Both are kept by the helper on this computer; nothing about them reaches your account."
+  }
+}

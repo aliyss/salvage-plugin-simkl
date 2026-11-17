@@ -1,0 +1,50 @@
+name: Build plugin
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      - name: Build
+        run: bun run build
+
+      # The release lives in this repository. Its tag is the manifest version,
+      # so a version bump creates a new release and any other commit refreshes
+      # the assets of the current one.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p "require('./manifest.json').version")"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" manifest.json dist/plugin.js --clobber
+          else
+            gh release create "$tag" manifest.json dist/plugin.js \
+              --target "$GITHUB_SHA" \
+              --title "$tag" \
+              --generate-notes \
+              --latest
+          fi
