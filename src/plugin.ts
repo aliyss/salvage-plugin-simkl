@@ -8,6 +8,7 @@ import {
   fetchActivities,
   fetchIds,
   fetchItems,
+  fetchPreview,
   fetchViewer,
   LIST_STATUSES,
   MEDIA_TYPES,
@@ -377,6 +378,30 @@ async function episodes(
   return { kind: "episodes", text: episodePage(list, paging) };
 }
 
+/**
+ * The description and poster of the title an entry links to, answered only for
+ * the fields a page's own preview lacked. A title's own page is one request,
+ * and the token is the one every other visit uses.
+ */
+async function preview(
+  subject: Subject | undefined,
+  secrets: Record<string, string> | undefined,
+): Promise<Data> {
+  const link = linkFromUrl(subject?.link?.url);
+  if (!link) {
+    throw new PluginError(
+      "bad_subject",
+      "This entry does not link to a SIMKL title.",
+    );
+  }
+
+  const credentials = credentialsOf(secrets);
+  const filled = await withToken(credentials, (live) =>
+    fetchPreview(live, link),
+  );
+  return { kind: "link-preview", text: JSON.stringify(filled) };
+}
+
 export default () =>
   serve(async ({ command, params }) => {
     if (command === "catalogue") {
@@ -392,6 +417,9 @@ export default () =>
     }
     if (command === "episodes") {
       return await episodes(params.subject, params.secrets, params.paging);
+    }
+    if (command === "preview") {
+      return await preview(params.subject, params.secrets);
     }
 
     throw new PluginError("unsupported", `Unknown command ${command}.`);

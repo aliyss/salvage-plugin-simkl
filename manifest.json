@@ -2,9 +2,16 @@
   "pluginApiVersion": 1,
   "id": "salvage-plugin-simkl",
   "name": "SIMKL",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "runtime": { "entry": "dist/plugin.js" },
-  "provides": [],
+  "provides": [
+    {
+      "data": "link-preview",
+      "command": "preview",
+      "timeoutMs": 12000,
+      "settings": []
+    }
+  ],
   "contributes": [
     {
       "id": "episodes",

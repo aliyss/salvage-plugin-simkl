@@ -24,6 +24,8 @@ const MAX_BYTES = 8_000_000;
 const MAX_ITEMS = 5_000;
 const MAX_TITLE = 200;
 const MAX_NAME = 100;
+/** A card's description is a paragraph, not the whole overview. */
+const MAX_DESCRIPTION = 600;
 /** A poster path is `74/74415673dcdc9cdd`, and nothing longer can be one. */
 const POSTER_PATH = /^\d{1,6}\/[a-z0-9]{6,40}$/i;
 const MIN_YEAR = 1800;
@@ -521,6 +523,36 @@ export async function refreshAccessToken(
   } catch {
     return null;
   }
+}
+
+/** What a link preview needs from a title: its name, its overview and its poster. */
+export type Preview = {
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+};
+
+/**
+ * The description and poster of one title, for a link whose page the app read
+ * without either. One request answers a title's own page, which is the same
+ * per-item lookup the episodes command already makes.
+ */
+export async function fetchPreview(
+  credentials: Credentials,
+  link: { kind: string; id: string },
+): Promise<Preview> {
+  const segment =
+    link.kind === "movies" ? "movies" : link.kind === "anime" ? "anime" : "tv";
+  const body = await readJson(credentials, `/${segment}/${link.id}`);
+  if (!isRecord(body)) {
+    throw new PluginError("no_data", "SIMKL has no title at that link.");
+  }
+
+  return {
+    title: shortText(body.title, MAX_TITLE),
+    description: shortText(body.overview, MAX_DESCRIPTION),
+    imageUrl: posterOf(body.poster),
+  };
 }
 
 /** The timestamps every later sync is measured from. The cheapest call there is. */
