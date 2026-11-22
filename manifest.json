@@ -2,12 +2,13 @@
   "pluginApiVersion": 1,
   "id": "salvage-plugin-simkl",
   "name": "SIMKL",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "runtime": { "entry": "dist/plugin.js" },
   "provides": [
     {
       "data": "link-preview",
       "command": "preview",
+      "when": { "link.host": ["simkl.com"] },
       "timeoutMs": 12000,
       "settings": []
     }
