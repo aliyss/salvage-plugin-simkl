@@ -57,18 +57,23 @@ describe("the episodes SIMKL reports", () => {
         season: 1,
         episode: 1,
         date: "1998-10-07T00:00:00Z",
-        img: "https://simkl.in/episodes/1/11a_m.jpg",
+        img: "10/109382ff5083c2d0",
         description: "<b>Pilot</b> &amp; more",
       },
       { season: 1, episode: 2, img: "http://simkl.in/episodes/2/22a_m.jpg" },
+      {
+        season: 1,
+        episode: 3,
+        img: "https://simkl.in/episodes/3/33ae_m.jpg",
+      },
     ]);
 
-    expect(episodes).toHaveLength(2);
+    expect(episodes).toHaveLength(3);
     expect(episodes[0]).toEqual({
       number: 1,
       title: "Episode 1",
       date: "1998-10-07",
-      image: "https://simkl.in/episodes/1/11a_m.jpg",
+      image: "https://simkl.in/episodes/10/109382ff5083c2d0_c.webp",
       description: "Pilot &amp; more",
       url: null,
     });
@@ -76,6 +81,8 @@ describe("the episodes SIMKL reports", () => {
     // has a title a card can draw.
     expect(episodes[1]?.image).toBeNull();
     expect(episodes[1]?.title).toBe("Episode 2");
+    // An answer that is already an address is kept as it came.
+    expect(episodes[2]?.image).toBe("https://simkl.in/episodes/3/33ae_m.jpg");
   });
 
   test("are none at all when SIMKL answers nothing", () => {

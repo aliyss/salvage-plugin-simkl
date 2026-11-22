@@ -13,6 +13,9 @@ import { keepStills } from "./still";
 
 import type { Credentials } from "./simkl";
 
+const EPISODES = "https://simkl.in/episodes";
+/** An episode picture is a path like `10/109382ff5083c2d0`, and no longer. */
+const EPISODE_PATH = /^\d{1,6}\/[a-z0-9]{6,40}$/i;
 const MAX_EPISODES = 60;
 const MAX_TITLE = 160;
 const MAX_DESCRIPTION = 400;
@@ -87,6 +90,20 @@ function httpsUrl(value: unknown): string | null {
     : null;
 }
 
+/**
+ * The address of an episode's still. SIMKL answers a bare path —
+ * `10/109382ff5083c2d0`, not a URL — so the host, the kind, a size and an
+ * extension are what make it one. An answer that is already an address is
+ * kept as it came, and anything else is dropped.
+ */
+function stillOf(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim();
+  return EPISODE_PATH.test(text) ? `${EPISODES}/${text}_c.webp` : httpsUrl(text);
+}
+
 function cleanText(value: unknown, max: number): string | null {
   if (typeof value !== "string") {
     return null;
@@ -141,7 +158,7 @@ export function listFrom(rows: unknown): Episode[] {
     title:
       cleanText(entry.row.title, MAX_TITLE) ?? `Episode ${String(entry.episode)}`,
     date: dateOf(entry.row.date),
-    image: httpsUrl(entry.row.img),
+    image: stillOf(entry.row.img),
     description: cleanText(entry.row.description, MAX_DESCRIPTION),
     // SIMKL's episode pages are not addressable by id, so no link is offered.
     url: null,
