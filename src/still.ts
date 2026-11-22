@@ -96,9 +96,12 @@ export async function keepStill(url: string | null): Promise<string | null> {
     // mid-write — the helper answers a plugin and exits — never leaves a
     // half-written picture that later reads as one that is already filed.
     const part = join(mediaDirectory(), `${name}.part`);
-    await writeFile(part, bytes).catch(() => undefined);
-    await rename(part, join(mediaDirectory(), name)).catch(() => undefined);
-    return name;
+    await writeFile(part, bytes);
+    await rename(part, join(mediaDirectory(), name));
+    // A write that did not land used to answer its name anyway, and the row
+    // then drew a signed link to a file that was not there — a broken picture
+    // with no fallback. Only a file that can be read back is answered.
+    return (await filed(name)) ? name : null;
   } catch {
     // A picture that cannot be kept leaves the site's own address in place.
     return null;

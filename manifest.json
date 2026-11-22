@@ -2,7 +2,7 @@
   "pluginApiVersion": 1,
   "id": "salvage-plugin-simkl",
   "name": "SIMKL",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "runtime": { "entry": "dist/plugin.js" },
   "provides": [
     {
